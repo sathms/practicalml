@@ -1,0 +1,124 @@
+---
+title: "Practical ML - Prediction Assignment"
+author: "Sath"
+date: "12/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Predict if a physical activity is performed correctly with self-reported data from individuals.
+
+With devices such as Jawbone Up, Nike FuelBand, and Fitbit it is possible to collect a large amount of data about personal activity. People regularly quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this exercise, 6 participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal of this project, is to use data from accelerometers on the belt, forearm, arm, and dumbell and predict the  manner in which they did the exercise.
+
+Data is from http://web.archive.org/web/20161224072740/htp://http:/groupware.les.inf.puc-rio.br/har.  See citation [1]
+
+Following are steps involved in this exercise:
+
+1) Process the data, for use of this project
+2) Explore the data, and remove variables with no predicting power
+3) Model selection - try different models 
+4) Model examination, to see if we get a good accuracy
+5) Conclusion on the better ML model that can be used for classification
+6) Predicting the classification ('classe') on test set using the ML Model.
+
+```{r importdata}
+train_data <- read.csv("pml-training.csv", na.strings = c("NA",""))
+test_data <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+```
+
+```{r Preprocessing}
+dim(train_data)
+names(train_data)
+
+# Remove variables like timestamp that offer little or no predicting power
+train_data <- train_data[,colSums(is.na(train_data)) == 0]
+trainData <- train_data[, -c(1:7)]
+
+test_data <- test_data[,colSums(is.na(test_data)) == 0]
+testData  <- test_data[, -c(1:7)]
+```
+
+
+```{r}
+library(caret)
+set.seed(7826) 
+inTrain <- createDataPartition(trainData$classe, p = 0.7, list = FALSE)
+train <- trainData[inTrain, ]
+valid <- trainData[-inTrain, ]
+```
+
+# Classification Tree with k-fold cross validation:
+
+We build a Classification Tree model with a 5 fold cross validation and fit the training data on to the model. We then print the results for review.
+
+```{r classificationTree}
+control   <- trainControl(method = "cv", number = 5)
+fit_rpart <- train(classe ~ ., data = train, method = "rpart", 
+                   trControl = control)
+print(fit_rpart, digits = 4)
+```
+
+Plot the tree for visual inspection.
+
+```{r classTreePlot, echo=FALSE}
+library(rpart)
+library(rpart.plot)
+library(rattle)
+fancyRpartPlot(fit_rpart$finalModel)
+```
+
+Now we run the validation dataset through the model to see what the prediction looks like using the Classification tree.
+
+```{r predict_rpart}
+# predict outcomes using validation set
+predict_rpart <- predict(fit_rpart, valid)
+predict_rpart
+(conf_rpart <- confusionMatrix(as.factor(valid$classe), predict_rpart))
+```
+
+
+```{r accuracy_rpart}
+(accuracy_rpart <- conf_rpart$overall[1])
+```
+The sensitivity is poor (accuracy rate of ~ 0.5) and thus classification tree does not predict very well.
+
+## Random Forest
+
+Now, We build a Random Forest model with a 5 fold cross validation and fit the training data on to the model. We then print the results for review.
+
+```{r randomForest}
+control <- trainControl(method = "cv", number = 5)
+fit_rf <- train(classe ~ ., data = train, method = "rf", 
+                   trControl = control)
+print(fit_rf, digits = 4)
+```
+
+```{r predict_randomForest}
+# predict outcomes using validation set
+predict_rf <- predict(fit_rf, valid)
+# Show prediction result
+(conf_rf <- confusionMatrix(as.factor(valid$classe), predict_rf))
+```
+```{r}
+(accuracy_rf <- conf_rf$overall[1])
+```
+Random forest is a better classifier with better accuracy compared to classification tree.  
+
+We will now do the predictions for the testing set using random forest.
+
+```{r}
+(predict(fit_rf, testData))
+```
+
+```{r SystemInfo}
+R.version
+```
+
+References:
+
+[1] Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
